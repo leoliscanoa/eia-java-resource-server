@@ -1,0 +1,131 @@
+spring:
+  main:
+    allow-bean-definition-overriding: true
+  profiles:
+    active: local
+  web:
+    locale: es_CO
+  jpa:
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jws-algorithms: RS256
+          jwk-set-uri: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI:http://localhost:8080/oauth2/sso/jwks}
+          audiences: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES:EIA}
+  jackson:
+    time-zone: UTC
+
+management:
+  endpoint:
+    health:
+      show-details: ALWAYS
+      probes:
+        enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+
+server:
+  forward-headers-strategy: framework
+  port: 8080
+  servlet:
+    context-path: /api/eia
+
+logging:
+  level:
+    com.lliscano: INFO
+  pattern:
+    console: "%black(%d{ISO8601}) %X{X-CORRELATION-ID} %highlight(%-5level) [%green(%t)] %yellow(%C{1.}): %msg%n%throwable"
+    file: "%d{ISO8601} %X{X-CORRELATION-ID} %-5level [%t] %C{1.}: %msg%n%throwable"
+  file:
+    name: ./logs/spring.log
+    path: ./logs
+  logback:
+    rollingpolicy:
+      max-file-size: 10MB
+      file-name-pattern: ./logs/spring-%d{yyyy-MM-dd}.%i.log
+      max-history: 10
+      total-size-cap: 100MB
+
+springdoc:
+  api-docs:
+    enabled: true
+  default-produces-media-type: application/json
+  override-with-generic-response: true
+  info:
+    title: EIA Resource Server
+    description: EIA Resource Server - Gestión Estratégica del Entorno (Entornia)
+    version: 1.0.0
+    contact:
+      name: Leo Liscano
+      email: andresliscanoa@gmail.com
+      url: https://github.com/leoliscanoa
+  oAuthFlow:
+    authorizationUrl: http://localhost:8080/oauth2/sso/authorize
+    tokenUrl: http://localhost:8080/oauth2/sso/token
+    refreshUrl: http://localhost:8080/oauth2/sso/token
+  show-oauth2-endpoints: true
+  swagger-ui:
+    oauth:
+      client-id: EIA
+      client-secret: eia_secret_pass_123
+      use-pkce-with-authorization-code-grant: false
+      scopes: openid email profile cerbos:users:read cerbos:tenants:read
+    operations-sorter: method
+    tags-sorter: alpha
+    enabled: true
+    try-it-out-enabled: false
+    supported-submit-methods: get, post, put, delete
+    default-models-expand-depth: -1
+    disable-swagger-default-url: true
+    display-request-duration: true
+    path: /swagger-ui.html
+
+commons:
+  http-client:
+    connect-timeout: 3000
+    read-timeout: 5000
+  m2m:
+    token-uri: ${COMMONS_M2M_TOKEN_URI:http://localhost:8080/oauth2/sso/token}
+    clients:
+      EIA:
+        client-secret: ${COMMONS_M2M_CLIENTS_EIA_CLIENT_SECRET:eia_secret_pass_123}
+        scopes:
+          - cerbos:users:read
+          - cerbos:tenants:read
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      cerbos-service:
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        failureRateThreshold: 50.0
+        waitDurationInOpenState: 10000ms
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+  retry:
+    instances:
+      cerbos-service:
+        maxAttempts: 3
+        waitDuration: 200ms
+        enableExponentialBackoff: true
+        exponentialBackoffMultiplier: 2.0
+        retryExceptions:
+          - java.io.IOException
+          - org.springframework.web.reactive.function.client.WebClientRequestException
+        ignoreExceptions:
+          - org.springframework.web.reactive.function.client.WebClientResponseException.BadRequest
+          - org.springframework.web.reactive.function.client.WebClientResponseException.Unauthorized
+          - org.springframework.web.reactive.function.client.WebClientResponseException.Forbidden
+          - org.springframework.web.reactive.function.client.WebClientResponseException.NotFound
+
+app:
+  cerbos-api-url: ${APP_CERBOS_API_URL:http://localhost:8081/api/cerbos-resource-server}
