@@ -29,4 +29,14 @@ public interface ProjectMemberRepository extends JpaRepository<ProjectMember, Lo
             @Param("userUuid") String userUuid,
             @Param("username") String username,
             @Param("projectRole") String projectRole);
+
+    @Query("SELECT m FROM ProjectMember m " +
+           "WHERE m.project.uuid = :projectUuid " +
+           "AND (m.userUuid = :userUuid OR m.userUuid = :username) " +
+           "AND m.isActive = true " +
+           "AND m.isDeleted = false")
+    Optional<ProjectMember> findActiveMemberByProjectUuidAndUserIdentifier(
+            @Param("projectUuid") String projectUuid,
+            @Param("userUuid") String userUuid,
+            @Param("username") String username);
 }

@@ -2,7 +2,9 @@ package com.lliscano.eia.security;
 
 import com.lliscano.commons.components.RequestContextHolder;
 import com.lliscano.commons.dtos.RequestContextData;
+import com.lliscano.eia.model.entity.ProjectMember;
 import com.lliscano.eia.repository.ProjectMemberRepository;
+import com.lliscano.eia.service.ProjectRoleService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -15,6 +17,7 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -25,6 +28,9 @@ class ProjectSecurityTest {
 
     @Mock
     private ProjectMemberRepository projectMemberRepository;
+
+    @Mock
+    private ProjectRoleService projectRoleService;
 
     @InjectMocks
     private ProjectSecurity projectSecurity;
@@ -45,10 +51,11 @@ class ProjectSecurityTest {
 
         assertTrue(result);
         verifyNoInteractions(projectMemberRepository);
+        verifyNoInteractions(projectRoleService);
     }
 
     @Test
-    @DisplayName("isProjectLead - usuario con rol PROJECT_LEAD retorna true")
+    @DisplayName("isProjectLead - usuario con rol lead dinámico retorna true")
     void isProjectLead_LeadMember_ReturnsTrue() {
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken("leaduser", "n/a", List.of(new SimpleGrantedAuthority("EIA_USER"))));
@@ -57,8 +64,14 @@ class ProjectSecurityTest {
                 .sub("leaduser")
                 .build());
 
-        when(projectMemberRepository.existsByProjectUuidAndUserIdentifierAndRole(
-                "proj-1", "user-lead-uuid", "leaduser", "PROJECT_LEAD")).thenReturn(true);
+        ProjectMember member = ProjectMember.builder()
+                .projectRole("PROJECT_LEAD")
+                .isActive(true)
+                .build();
+
+        when(projectMemberRepository.findActiveMemberByProjectUuidAndUserIdentifier("proj-1", "user-lead-uuid", "leaduser"))
+                .thenReturn(Optional.of(member));
+        when(projectRoleService.isLeadRole("PROJECT_LEAD")).thenReturn(true);
 
         boolean result = projectSecurity.isProjectLead("proj-1");
 
@@ -66,7 +79,7 @@ class ProjectSecurityTest {
     }
 
     @Test
-    @DisplayName("isProjectLead - usuario sin rol PROJECT_LEAD retorna false")
+    @DisplayName("isProjectLead - usuario sin rol lead retorna false")
     void isProjectLead_NonLead_ReturnsFalse() {
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken("analyst", "n/a", List.of(new SimpleGrantedAuthority("EIA_USER"))));
@@ -75,12 +88,37 @@ class ProjectSecurityTest {
                 .sub("analyst")
                 .build());
 
-        when(projectMemberRepository.existsByProjectUuidAndUserIdentifierAndRole(
-                "proj-1", "user-analyst-uuid", "analyst", "PROJECT_LEAD")).thenReturn(false);
+        ProjectMember member = ProjectMember.builder()
+                .projectRole("ANALYST")
+                .isActive(true)
+                .build();
+
+        when(projectMemberRepository.findActiveMemberByProjectUuidAndUserIdentifier("proj-1", "user-analyst-uuid", "analyst"))
+                .thenReturn(Optional.of(member));
+        when(projectRoleService.isLeadRole("ANALYST")).thenReturn(false);
 
         boolean result = projectSecurity.isProjectLead("proj-1");
 
         assertFalse(result);
+    }
+
+    @Test
+    @DisplayName("isProjectLead - miembro no encontrado retorna false")
+    void isProjectLead_MemberNotFound_ReturnsFalse() {
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken("other", "n/a", List.of(new SimpleGrantedAuthority("EIA_USER"))));
+        RequestContextHolder.setContext(RequestContextData.builder()
+                .uuid("other-uuid")
+                .sub("other")
+                .build());
+
+        when(projectMemberRepository.findActiveMemberByProjectUuidAndUserIdentifier("proj-1", "other-uuid", "other"))
+                .thenReturn(Optional.empty());
+
+        boolean result = projectSecurity.isProjectLead("proj-1");
+
+        assertFalse(result);
+        verifyNoInteractions(projectRoleService);
     }
 
     @Test

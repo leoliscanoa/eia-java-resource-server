@@ -10,6 +10,7 @@ import com.lliscano.eia.model.dto.request.ProjectMemberAssignDTO;
 import com.lliscano.eia.model.dto.response.ProjectMemberResponseDTO;
 import com.lliscano.eia.model.entity.Project;
 import com.lliscano.eia.model.entity.ProjectMember;
+import com.lliscano.eia.model.entity.ProjectRole;
 import com.lliscano.eia.repository.ProjectMemberRepository;
 import com.lliscano.eia.repository.ProjectRepository;
 import lombok.RequiredArgsConstructor;
@@ -32,15 +33,26 @@ public class ProjectMemberService {
     private final ProjectMemberRepository projectMemberRepository;
     private final ProjectMemberMapper projectMemberMapper;
     private final CerberosClientService cerberosClientService;
+    private final ProjectRoleService projectRoleService;
 
     @Transactional
     public ResponseDTO<ProjectMemberResponseDTO> assignMember(String projectUuid, ProjectMemberAssignDTO request) {
         RequestContextData context = RequestContextHolder.getContext();
-        String username = (context != null && context.getSub() != null) ? context.getSub() : "system";
         String tenantId = (context != null && context.getTenant() != null) ? context.getTenant() : null;
 
         Project project = projectRepository.findByUuidAndIsDeletedFalse(projectUuid)
                 .orElseThrow(() -> new RecordNotFoundException("Proyecto no encontrado con UUID: " + projectUuid));
+
+        // Validación dinámica de catálogo de roles en base de datos
+        String requestedRole = request.getProjectRole() != null ? request.getProjectRole().trim().toUpperCase() : "";
+        ProjectRole roleEntity = projectRoleService.getRoleByCode(requestedRole)
+                .orElseThrow(() -> new RecordNotFoundException(
+                        String.format("El rol de proyecto '%s' no existe o se encuentra inactivo", requestedRole)));
+
+        if (!roleEntity.isActive()) {
+            throw new RecordNotFoundException(
+                    String.format("El rol de proyecto '%s' no se encuentra activo", requestedRole));
+        }
 
         Optional<ProjectMember> existingMemberOpt = projectMemberRepository
                 .findByProjectUuidAndUserUuidAndIsDeletedFalse(projectUuid, request.getUserUuid());
@@ -48,17 +60,15 @@ public class ProjectMemberService {
         ProjectMember member;
         if (existingMemberOpt.isPresent()) {
             member = existingMemberOpt.get();
-            member.setProjectRole(request.getProjectRole());
+            member.setProjectRole(roleEntity.getCode());
             member.setActive(true);
-            member.setLastModifiedBy(username);
         } else {
             member = ProjectMember.builder()
                     .project(project)
                     .userUuid(request.getUserUuid())
-                    .projectRole(request.getProjectRole())
+                    .projectRole(roleEntity.getCode())
                     .isActive(true)
                     .isDeleted(false)
-                    .createdBy(username)
                     .build();
         }
 
@@ -123,15 +133,11 @@ public class ProjectMemberService {
 
     @Transactional
     public ResponseDTO<String> removeMember(String projectUuid, String userUuid) {
-        RequestContextData context = RequestContextHolder.getContext();
-        String username = (context != null && context.getSub() != null) ? context.getSub() : "system";
-
         ProjectMember member = projectMemberRepository.findByProjectUuidAndUserUuidAndIsDeletedFalse(projectUuid, userUuid)
                 .orElseThrow(() -> new RecordNotFoundException("Miembro no encontrado con UUID: " + userUuid + " en el proyecto: " + projectUuid));
 
         member.setDeleted(true);
         member.setActive(false);
-        member.setLastModifiedBy(username);
         projectMemberRepository.save(member);
 
         return ResponseDTO.<String>builder()

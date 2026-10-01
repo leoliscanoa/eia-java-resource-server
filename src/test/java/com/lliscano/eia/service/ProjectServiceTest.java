@@ -47,6 +47,9 @@ class ProjectServiceTest {
     @Mock
     private ProjectMapper projectMapper;
 
+    @Mock
+    private ProjectRoleService projectRoleService;
+
     @InjectMocks
     private ProjectService projectService;
 
@@ -108,6 +111,7 @@ class ProjectServiceTest {
                 .sector("ENERGIA")
                 .build();
 
+        when(projectRoleService.getLeadRoleCode()).thenReturn("PROJECT_LEAD");
         when(projectRepository.existsByTenantIdAndCodeAndIsDeletedFalse(tenantId, "PRJ-001")).thenReturn(false);
         when(projectMapper.toEntity(request)).thenReturn(entity);
         when(territoryRepository.findAllByUuidInAndTenantIdAndIsDeletedFalse(anySet(), eq(tenantId)))
@@ -161,6 +165,7 @@ class ProjectServiceTest {
         Project p1 = Project.builder().code("PRJ-001").members(new ArrayList<>()).build();
         Project p2 = Project.builder().code("PRJ-002").members(new ArrayList<>()).build();
 
+        when(projectRoleService.getDefaultMemberRoleCode()).thenReturn("MEMBER");
         when(projectRepository.findAllByTenantIdAndIsDeletedFalse(tenantId)).thenReturn(List.of(p1, p2));
         when(projectMapper.toDto(p1)).thenReturn(ProjectResponseDTO.builder().code("PRJ-001").build());
         when(projectMapper.toDto(p2)).thenReturn(ProjectResponseDTO.builder().code("PRJ-002").build());
@@ -187,6 +192,7 @@ class ProjectServiceTest {
                 .build();
         p1.getMembers().add(member);
 
+        when(projectRoleService.getDefaultMemberRoleCode()).thenReturn("MEMBER");
         when(projectRepository.findAllByTenantIdAndMemberUserUuid(tenantId, userUuid, username)).thenReturn(List.of(p1));
         when(projectMapper.toDto(p1)).thenReturn(ProjectResponseDTO.builder().code("PRJ-001").build());
 

@@ -35,6 +35,7 @@ public class ProjectService {
     private final ProjectRepository projectRepository;
     private final TerritoryRepository territoryRepository;
     private final ProjectMapper projectMapper;
+    private final ProjectRoleService projectRoleService;
 
     @Transactional
     public ResponseDTO<ProjectResponseDTO> createProject(ProjectCreateRequestDTO request) {
@@ -56,15 +57,15 @@ public class ProjectService {
         project.setStatus("ACTIVE");
         project.setDeleted(false);
 
-        // Asociar director de proyecto inicial
+        // Asociar director de proyecto inicial resolviendo el rol de liderazgo desde el catálogo dinámico
         if (request.getLeadUserUuid() != null && !request.getLeadUserUuid().isBlank()) {
+            String leadRoleCode = projectRoleService.getLeadRoleCode();
             ProjectMember leadMember = ProjectMember.builder()
                     .project(project)
                     .userUuid(request.getLeadUserUuid())
-                    .projectRole("PROJECT_LEAD")
+                    .projectRole(leadRoleCode)
                     .isActive(true)
                     .isDeleted(false)
-                    .createdBy(username)
                     .build();
             project.getMembers().add(leadMember);
         }
@@ -97,7 +98,7 @@ public class ProjectService {
 
         Project savedProject = projectRepository.save(project);
         ProjectResponseDTO responseDTO = projectMapper.toDto(savedProject);
-        responseDTO.setUserRole("PROJECT_LEAD");
+        responseDTO.setUserRole(projectRoleService.getLeadRoleCode());
 
         return ResponseDTO.<ProjectResponseDTO>builder()
                 .message("Proyecto creado exitosamente")
@@ -127,9 +128,10 @@ public class ProjectService {
             projects = projectRepository.findAllByTenantIdAndMemberUserUuid(tenantId, userUuid, username);
         }
 
+        String defaultRole = projectRoleService.getDefaultMemberRoleCode();
         ArrayList<ProjectResponseDTO> dtos = projects.stream().map(p -> {
             ProjectResponseDTO dto = projectMapper.toDto(p);
-            String role = "MEMBER";
+            String role = defaultRole;
             if (p.getMembers() != null) {
                 for (ProjectMember m : p.getMembers()) {
                     if (m.isActive() && !m.isDeleted() &&
@@ -140,7 +142,7 @@ public class ProjectService {
                     }
                 }
             }
-            if (isAdmin && "MEMBER".equals(role)) {
+            if (isAdmin && defaultRole.equals(role)) {
                 role = "EIA_ADMIN";
             }
             dto.setUserRole(role);

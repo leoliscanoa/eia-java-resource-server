@@ -10,6 +10,7 @@ import com.lliscano.eia.model.dto.request.ProjectMemberAssignDTO;
 import com.lliscano.eia.model.dto.response.ProjectMemberResponseDTO;
 import com.lliscano.eia.model.entity.Project;
 import com.lliscano.eia.model.entity.ProjectMember;
+import com.lliscano.eia.model.entity.ProjectRole;
 import com.lliscano.eia.repository.ProjectMemberRepository;
 import com.lliscano.eia.repository.ProjectRepository;
 import org.junit.jupiter.api.AfterEach;
@@ -44,6 +45,9 @@ class ProjectMemberServiceTest {
     @Mock
     private CerberosClientService cerberosClientService;
 
+    @Mock
+    private ProjectRoleService projectRoleService;
+
     @InjectMocks
     private ProjectMemberService projectMemberService;
 
@@ -75,6 +79,11 @@ class ProjectMemberServiceTest {
                 .projectRole("PROJECT_ANALYST")
                 .build();
 
+        ProjectRole roleEntity = ProjectRole.builder()
+                .code("PROJECT_ANALYST")
+                .isActive(true)
+                .build();
+
         ProjectMember member = ProjectMember.builder()
                 .project(project)
                 .userUuid(memberUserUuid)
@@ -96,6 +105,7 @@ class ProjectMemberServiceTest {
                 .build();
 
         when(projectRepository.findByUuidAndIsDeletedFalse(projectUuid)).thenReturn(Optional.of(project));
+        when(projectRoleService.getRoleByCode("PROJECT_ANALYST")).thenReturn(Optional.of(roleEntity));
         when(projectMemberRepository.findByProjectUuidAndUserUuidAndIsDeletedFalse(projectUuid, memberUserUuid))
                 .thenReturn(Optional.empty());
         when(projectMemberRepository.save(any(ProjectMember.class))).thenReturn(member);
@@ -120,6 +130,11 @@ class ProjectMemberServiceTest {
                 .projectRole("PROJECT_LEAD")
                 .build();
 
+        ProjectRole roleEntity = ProjectRole.builder()
+                .code("PROJECT_LEAD")
+                .isActive(true)
+                .build();
+
         ProjectMember existingMember = ProjectMember.builder()
                 .project(project)
                 .userUuid(memberUserUuid)
@@ -128,6 +143,7 @@ class ProjectMemberServiceTest {
                 .build();
 
         when(projectRepository.findByUuidAndIsDeletedFalse(projectUuid)).thenReturn(Optional.of(project));
+        when(projectRoleService.getRoleByCode("PROJECT_LEAD")).thenReturn(Optional.of(roleEntity));
         when(projectMemberRepository.findByProjectUuidAndUserUuidAndIsDeletedFalse(projectUuid, memberUserUuid))
                 .thenReturn(Optional.of(existingMember));
         when(projectMemberRepository.save(existingMember)).thenReturn(existingMember);
@@ -155,6 +171,42 @@ class ProjectMemberServiceTest {
                         .userUuid(memberUserUuid)
                         .projectRole("ANALYST")
                         .build()));
+    }
+
+    @Test
+    @DisplayName("assignMember - rol no encontrado lanza RecordNotFoundException")
+    void assignMember_InvalidRole_ThrowsException() {
+        Project project = Project.builder().id(1L).uuid(projectUuid).build();
+        when(projectRepository.findByUuidAndIsDeletedFalse(projectUuid)).thenReturn(Optional.of(project));
+        when(projectRoleService.getRoleByCode("INVALID_ROLE")).thenReturn(Optional.empty());
+
+        RecordNotFoundException exception = assertThrows(RecordNotFoundException.class, () ->
+                projectMemberService.assignMember(projectUuid, ProjectMemberAssignDTO.builder()
+                        .userUuid(memberUserUuid)
+                        .projectRole("INVALID_ROLE")
+                        .build()));
+        assertTrue(exception.getMessage().contains("no existe o se encuentra inactivo"));
+    }
+
+    @Test
+    @DisplayName("assignMember - rol inactivo lanza RecordNotFoundException")
+    void assignMember_InactiveRole_ThrowsException() {
+        Project project = Project.builder().id(1L).uuid(projectUuid).build();
+        ProjectRole inactiveRole = ProjectRole.builder()
+                .code("INACTIVE_ROLE")
+                .isActive(false)
+                .build();
+
+        when(projectRepository.findByUuidAndIsDeletedFalse(projectUuid)).thenReturn(Optional.of(project));
+        when(projectRoleService.getRoleByCode("INACTIVE_ROLE")).thenReturn(Optional.of(inactiveRole));
+
+        RecordNotFoundException exception = assertThrows(RecordNotFoundException.class, () ->
+                projectMemberService.assignMember(projectUuid, ProjectMemberAssignDTO.builder()
+                        .userUuid(memberUserUuid)
+                        .projectRole("INACTIVE_ROLE")
+                        .build()));
+
+        assertTrue(exception.getMessage().contains("no se encuentra activo"));
     }
 
     @Test

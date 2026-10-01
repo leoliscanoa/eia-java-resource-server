@@ -1,7 +1,9 @@
 package com.lliscano.eia.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.lliscano.commons.advices.RestAdvice;
 import com.lliscano.commons.dtos.ResponseDTO;
+import com.lliscano.commons.exceptions.RecordNotFoundException;
 import com.lliscano.eia.model.dto.request.ProjectMemberAssignDTO;
 import com.lliscano.eia.model.dto.response.ProjectMemberResponseDTO;
 import com.lliscano.eia.security.ProjectSecurity;
@@ -12,6 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
@@ -28,6 +31,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @WebMvcTest(ProjectMemberController.class)
 @AutoConfigureMockMvc(addFilters = false)
+@Import(RestAdvice.class)
 class ProjectMemberControllerTest {
 
     @Autowired
@@ -70,6 +74,48 @@ class ProjectMemberControllerTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.data.uuid").value("user-uuid-1"))
                 .andExpect(jsonPath("$.data.projectRole").value("PROJECT_ANALYST"));
+    }
+
+    @Test
+    @DisplayName("POST /v1/projects/{projectUuid}/members - rol inexistente retorna 400 Bad Request")
+    @WithMockUser(authorities = "EIA_ADMIN")
+    void assignMember_InvalidRole_Returns400() throws Exception {
+        ProjectMemberAssignDTO request = ProjectMemberAssignDTO.builder()
+                .userUuid("user-uuid-1")
+                .projectRole("SUPER_HERO")
+                .build();
+
+        when(projectMemberService.assignMember(eq("proj-1"), any(ProjectMemberAssignDTO.class)))
+                .thenThrow(new RecordNotFoundException("El rol de proyecto 'SUPER_HERO' no existe o se encuentra inactivo"));
+
+        mockMvc.perform(post("/v1/projects/proj-1/members")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("RecordNotFoundException"))
+                .andExpect(jsonPath("$.data").value("El rol de proyecto 'SUPER_HERO' no existe o se encuentra inactivo"));
+    }
+
+    @Test
+    @DisplayName("POST /v1/projects/{projectUuid}/members - rol inactivo retorna 400 Bad Request")
+    @WithMockUser(authorities = "EIA_ADMIN")
+    void assignMember_InactiveRole_Returns400() throws Exception {
+        ProjectMemberAssignDTO request = ProjectMemberAssignDTO.builder()
+                .userUuid("user-uuid-1")
+                .projectRole("OLD_COLLECTOR")
+                .build();
+
+        when(projectMemberService.assignMember(eq("proj-1"), any(ProjectMemberAssignDTO.class)))
+                .thenThrow(new RecordNotFoundException("El rol de proyecto 'OLD_COLLECTOR' no se encuentra activo"));
+
+        mockMvc.perform(post("/v1/projects/proj-1/members")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("RecordNotFoundException"))
+                .andExpect(jsonPath("$.data").value("El rol de proyecto 'OLD_COLLECTOR' no se encuentra activo"));
     }
 
     @Test

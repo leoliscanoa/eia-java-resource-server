@@ -6,6 +6,7 @@ import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
@@ -16,6 +17,7 @@ import org.testcontainers.utility.DockerImageName;
 public abstract class AbstractBaseIntegrationIT {
 
     protected static final PostgreSQLContainer<?> POSTGRES_CONTAINER;
+    protected static final GenericContainer<?> REDIS_CONTAINER;
 
     @MockBean
     protected JwtDecoder jwtDecoder;
@@ -27,6 +29,10 @@ public abstract class AbstractBaseIntegrationIT {
                 .withPassword("postgres")
                 .withInitScript("init-schema.sql");
         POSTGRES_CONTAINER.start();
+
+        REDIS_CONTAINER = new GenericContainer<>(DockerImageName.parse("redis:7.2.4-alpine"))
+                .withExposedPorts(6379);
+        REDIS_CONTAINER.start();
     }
 
     @DynamicPropertySource
@@ -37,5 +43,8 @@ public abstract class AbstractBaseIntegrationIT {
         registry.add("spring.datasource.password", POSTGRES_CONTAINER::getPassword);
         registry.add("spring.jpa.hibernate.ddl-auto", () -> "create-drop");
         registry.add("spring.jpa.properties.hibernate.default_schema", () -> "eia");
+
+        registry.add("spring.data.redis.host", REDIS_CONTAINER::getHost);
+        registry.add("spring.data.redis.port", () -> REDIS_CONTAINER.getMappedPort(6379));
     }
 }
