@@ -1,5 +1,8 @@
 package com.lliscano.eia.service;
 
+import com.lliscano.commons.components.audit.AsyncAuditPublisher;
+import com.lliscano.commons.components.audit.SensitiveDataSanitizer;
+
 import com.lliscano.commons.components.RequestContextHolder;
 import com.lliscano.commons.dtos.RequestContextData;
 import com.lliscano.commons.dtos.ResponseDTO;
@@ -49,6 +52,12 @@ class ProjectServiceTest {
 
     @Mock
     private ProjectRoleService projectRoleService;
+
+    @Mock
+    private AsyncAuditPublisher auditPublisher;
+
+    @Mock
+    private SensitiveDataSanitizer sensitiveDataSanitizer;
 
     @InjectMocks
     private ProjectService projectService;

@@ -1,8 +1,12 @@
 package com.lliscano.eia.service;
 
 import com.lliscano.commons.components.RequestContextHolder;
+import com.lliscano.commons.components.audit.AsyncAuditPublisher;
+import com.lliscano.commons.components.audit.SensitiveDataSanitizer;
 import com.lliscano.commons.dtos.RequestContextData;
 import com.lliscano.commons.dtos.ResponseDTO;
+import com.lliscano.commons.dtos.audit.ActorDTO;
+import com.lliscano.commons.dtos.audit.AuditEventDTO;
 import com.lliscano.commons.exceptions.RecordNotFoundException;
 import com.lliscano.commons.exceptions.UnauthorizedEntityException;
 import com.lliscano.eia.mapper.ProjectMapper;
@@ -24,6 +28,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -36,6 +41,43 @@ public class ProjectService {
     private final TerritoryRepository territoryRepository;
     private final ProjectMapper projectMapper;
     private final ProjectRoleService projectRoleService;
+    private final AsyncAuditPublisher auditPublisher;
+    private final SensitiveDataSanitizer sensitiveDataSanitizer;
+
+    private void publishAudit(String entityId, String tenantId, String action, Object previousState, Object currentState) {
+        try {
+            RequestContextData context = RequestContextHolder.getContext();
+            String username = (context != null && context.getSub() != null) ? context.getSub() : "system";
+            String userUuid = (context != null && context.getUuid() != null) ? context.getUuid() : null;
+            String ipAddress = (context != null && context.getIpAddress() != null) ? context.getIpAddress() : null;
+
+            Map<String, Object> prevSanitized = previousState != null ? sensitiveDataSanitizer.sanitizeObject(previousState) : null;
+            Map<String, Object> currSanitized = currentState != null ? sensitiveDataSanitizer.sanitizeObject(currentState) : null;
+
+            AuditEventDTO auditEvent = AuditEventDTO.builder()
+                    .eventId(UUID.randomUUID().toString())
+                    .correlationId(UUID.randomUUID().toString())
+                    .tenantId(tenantId)
+                    .serviceName("eia-java-resource-server")
+                    .entityName("Project")
+                    .entityId(entityId)
+                    .action(action)
+                    .timestamp(Instant.now())
+                    .actor(ActorDTO.builder()
+                            .username(username)
+                            .userUuid(userUuid)
+                            .clientId("EIA")
+                            .ipAddress(ipAddress)
+                            .build())
+                    .previousState(prevSanitized)
+                    .currentState(currSanitized)
+                    .build();
+
+            auditPublisher.publishEvent(auditEvent);
+        } catch (Exception ex) {
+            log.warn("Error emitiendo evento de auditoría para proyecto [{}]: {}", entityId, ex.getMessage());
+        }
+    }
 
     @Transactional
     public ResponseDTO<ProjectResponseDTO> createProject(ProjectCreateRequestDTO request) {
@@ -97,6 +139,8 @@ public class ProjectService {
         }
 
         Project savedProject = projectRepository.save(project);
+        publishAudit(savedProject.getUuid(), tenantId, "CREATE", null, savedProject);
+
         ProjectResponseDTO responseDTO = projectMapper.toDto(savedProject);
         responseDTO.setUserRole(projectRoleService.getLeadRoleCode());
 
@@ -185,6 +229,8 @@ public class ProjectService {
                 : projectRepository.findByUuidAndIsDeletedFalse(uuid)
                     .orElseThrow(() -> new RecordNotFoundException("Proyecto no encontrado con UUID: " + uuid));
 
+        ProjectResponseDTO previousState = projectMapper.toDto(project);
+
         if (request.getName() != null) project.setName(request.getName());
         if (request.getDescription() != null) project.setDescription(request.getDescription());
         if (request.getSector() != null) project.setSector(request.getSector());
@@ -198,6 +244,8 @@ public class ProjectService {
 
         project.setLastModifiedBy(username);
         Project saved = projectRepository.save(project);
+
+        publishAudit(saved.getUuid(), tenantId, "UPDATE", previousState, projectMapper.toDto(saved));
 
         return ResponseDTO.<ProjectResponseDTO>builder()
                 .message("Proyecto actualizado exitosamente")
@@ -217,9 +265,13 @@ public class ProjectService {
                 : projectRepository.findByUuidAndIsDeletedFalse(uuid)
                     .orElseThrow(() -> new RecordNotFoundException("Proyecto no encontrado con UUID: " + uuid));
 
+        ProjectResponseDTO previousState = projectMapper.toDto(project);
+
         project.setDeleted(true);
         project.setLastModifiedBy(username);
         projectRepository.save(project);
+
+        publishAudit(uuid, tenantId, "DELETE", previousState, null);
 
         return ResponseDTO.<String>builder()
                 .message("Proyecto eliminado exitosamente")
