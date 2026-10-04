@@ -39,4 +39,22 @@ public interface ProjectMemberRepository extends JpaRepository<ProjectMember, Lo
             @Param("projectUuid") String projectUuid,
             @Param("userUuid") String userUuid,
             @Param("username") String username);
+
+    @Query("SELECT DISTINCT m.project.uuid FROM ProjectMember m " +
+           "WHERE (m.userUuid = :userUuid OR m.userUuid = :username) " +
+           "AND m.isActive = true " +
+           "AND m.isDeleted = false " +
+           "AND m.project.isDeleted = false")
+    List<String> findAssignedProjectUuidsByUserIdentifier(
+            @Param("userUuid") String userUuid,
+            @Param("username") String username);
+
+    @Query("SELECT CASE WHEN COUNT(m) > 0 THEN true ELSE false END FROM ProjectMember m " +
+           "WHERE (m.userUuid = :userUuid OR m.userUuid = :username) " +
+           "AND (m.projectRole = 'ADMIN' OR m.projectRole = 'EIA_ADMIN') " +
+           "AND m.isActive = true " +
+           "AND m.isDeleted = false")
+    boolean isUserEiaAdmin(
+            @Param("userUuid") String userUuid,
+            @Param("username") String username);
 }

@@ -58,6 +58,7 @@ public class ProjectService {
                     .eventId(UUID.randomUUID().toString())
                     .correlationId(UUID.randomUUID().toString())
                     .tenantId(tenantId)
+                    .projectId(entityId) // FEAT-029: Propagación de projectId para control ReBAC e índice sparse
                     .serviceName("eia-java-resource-server")
                     .entityName("Project")
                     .entityId(entityId)

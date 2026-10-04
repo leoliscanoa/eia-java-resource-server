@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.ArrayList;
 
 @RestController
-@RequestMapping("/v1/admin/projects")
+@RequestMapping({"/v1/projects", "/v1/admin/projects"})
 @RequiredArgsConstructor
 @Tag(name = "EIA Projects", description = "Endpoints de gestión de proyectos EIA")
 @PreAuthorize("hasRole('ADMIN_PROJECTS')")
